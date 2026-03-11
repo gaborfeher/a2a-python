@@ -36,15 +36,16 @@ def main() -> None:
             'AGENT_ENGINE_RESOURCE_ID must be defined'
         )
 
-    client = vertexai.Client(
-        project=project,
-        location=location,
-        http_options={'base_url': base_url, 'api_version': api_version},
-    )
+    def client_builder() -> vertexai.Client:
+        return vertexai.Client(
+            project=project,
+            location=location,
+            http_options={'base_url': base_url, 'api_version': api_version},
+        )
 
     sut_agent.serve(
         VertexTaskStore(
-            client=client,
+            client_builder=client_builder,
             agent_engine_resource_id=agent_engine_resource_id,
         )
     )

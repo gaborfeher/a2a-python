@@ -1,5 +1,7 @@
 import logging
 
+from collections.abc import Callable
+
 
 try:
     import vertexai
@@ -30,17 +32,23 @@ class VertexTaskStore(TaskStore):
 
     def __init__(
         self,
-        client: vertexai.Client,
+        client_builder: Callable[[], vertexai.Client],
         agent_engine_resource_id: str,
     ) -> None:
         """Initializes the VertexTaskStore.
 
         Args:
-            client: The Vertex AI client.
+            client_builder: A function that returns the Vertex AI client.
             agent_engine_resource_id: The resource ID of the agent engine.
         """
-        self._client = client
+        self._client: vertexai.Client | None = None
+        self._client_builder = client_builder
         self._agent_engine_resource_id = agent_engine_resource_id
+
+    def _get_client(self) -> vertexai.Client:
+        if self._client is None:
+            self._client = self._client_builder()
+        return self._client
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
@@ -54,7 +62,7 @@ class VertexTaskStore(TaskStore):
 
     async def _create(self, sdk_task: Task) -> None:
         stored_task = vertex_task_converter.to_stored_task(sdk_task)
-        await self._client.aio.agent_engines.a2a_tasks.create(
+        await self._get_client().aio.agent_engines.a2a_tasks.create(
             name=self._agent_engine_resource_id,
             a2a_task_id=sdk_task.id,
             config=vertexai_types.CreateAgentEngineTaskConfig(
@@ -174,7 +182,7 @@ class VertexTaskStore(TaskStore):
 
         if not events:
             return
-        await self._client.aio.agent_engines.a2a_tasks.events.append(
+        await self._get_client().aio.agent_engines.a2a_tasks.events.append(
             name=self._agent_engine_resource_id + '/a2aTasks/' + task.id,
             task_events=events,
         )
@@ -183,7 +191,7 @@ class VertexTaskStore(TaskStore):
         self, task_id: str
     ) -> vertexai_types.A2aTask | None:
         try:
-            a2a_task = await self._client.aio.agent_engines.a2a_tasks.get(
+            a2a_task = await self._get_client().aio.agent_engines.a2a_tasks.get(
                 name=self._agent_engine_resource_id + '/a2aTasks/' + task_id,
             )
         except genai_errors.APIError as e:
